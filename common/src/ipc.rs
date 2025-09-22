@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env,
-    io::{Read, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     marker::PhantomData,
     os::{
         fd::AsRawFd,
@@ -22,7 +22,9 @@ static PATH: LazyLock<PathBuf> = LazyLock::new(|| {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum IpcRequest {
+    SwitchProfile { name: String },
     GetProfile { name: String },
+    GetCurrentProfile,
     GetAllProfiles,
 }
 
@@ -30,6 +32,7 @@ pub enum IpcRequest {
 pub enum IpcResponse {
     Profile(Profile),
     AllProfiles(HashMap<String, Profile>),
+    Ok,
     Error(String),
 }
 
@@ -65,40 +68,49 @@ impl Ipc<Client> {
         })
     }
 
-    fn get_inner(&self) -> &ClientData {
-        let IpcInner::Client(client_data) = &self.inner else {
+    fn get_inner(&mut self) -> &mut ClientData {
+        let IpcInner::Client(client_data) = &mut self.inner else {
             unreachable!();
         };
 
         client_data
     }
 
-    pub fn get_stream(&self) -> &UnixStream {
-        &self.get_inner().stream
-    }
+    fn send_request_and_receive_response(
+        &mut self,
+        request: IpcRequest,
+    ) -> anyhow::Result<IpcResponse> {
+        let inner = self.get_inner();
 
-    pub fn request_profile(&self, name: &str) -> anyhow::Result<IpcResponse> {
-        let req = IpcRequest::GetProfile {
-            name: name.to_string(),
-        };
-        let mut stream = self.get_stream();
+        // Send request as JSON line
+        let mut writer = BufWriter::new(&inner.stream);
+        let request_json = serde_json::to_string(&request)?;
+        writeln!(writer, "{}", request_json)?;
+        writer.flush()?;
 
-        serde_json::to_writer(stream, &req)?;
-        stream.flush()?;
+        // Read response as JSON line
+        let mut reader = BufReader::new(&inner.stream);
+        let mut response_line = String::new();
+        reader.read_line(&mut response_line)?;
 
-        let response: IpcResponse = serde_json::from_reader(stream)?;
+        let response: IpcResponse = serde_json::from_str(response_line.trim())?;
         Ok(response)
     }
 
-    pub fn request_all_profiles(&self) -> anyhow::Result<IpcResponse> {
-        let req = IpcRequest::GetAllProfiles;
-        let mut stream = self.get_stream();
+    pub fn request_profile(&mut self, name: String) -> anyhow::Result<IpcResponse> {
+        self.send_request_and_receive_response(IpcRequest::GetProfile { name })
+    }
 
-        serde_json::to_writer(stream, &req)?;
-        stream.flush()?;
+    pub fn request_all_profiles(&mut self) -> anyhow::Result<IpcResponse> {
+        self.send_request_and_receive_response(IpcRequest::GetAllProfiles)
+    }
 
-        let response: IpcResponse = serde_json::from_reader(stream)?;
-        Ok(response)
+    pub fn request_current_profile(&mut self) -> anyhow::Result<IpcResponse> {
+        self.send_request_and_receive_response(IpcRequest::GetCurrentProfile)
+    }
+
+    pub fn switch_profile(&mut self, name: String) -> anyhow::Result<IpcResponse> {
+        self.send_request_and_receive_response(IpcRequest::SwitchProfile { name })
     }
 }
 
@@ -175,26 +187,27 @@ impl Ipc<Server> {
         inner.connections.get_mut(fd)
     }
 
-    pub fn handle_stream_data(&mut self, fd: &i32) -> anyhow::Result<IpcRequest> {
-        let mut buffer = Vec::new();
+    pub fn handle_stream_data(&mut self, fd: i32) -> anyhow::Result<IpcRequest> {
+        if let Some(stream) = self.get_mut(&fd) {
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
 
-        if let Some(stream) = self.get_mut(fd) {
-            match stream.read_to_end(&mut buffer) {
+            match reader.read_line(&mut line) {
                 Ok(0) => {
-                    self.remove_connection(fd);
-                    Err(anyhow::anyhow!("Connection removed"))
+                    self.remove_connection(&fd);
+                    Err(anyhow::anyhow!("Connection closed"))
                 }
-                Ok(n) => {
-                    let data = &buffer[..n];
-                    Ok(serde_json::from_slice::<IpcRequest>(data)?)
+                Ok(_) => {
+                    let request: IpcRequest = serde_json::from_str(line.trim())?;
+                    Ok(request)
                 }
                 Err(e) => {
-                    self.remove_connection(fd);
+                    self.remove_connection(&fd);
                     Err(anyhow::anyhow!(e))
                 }
             }
         } else {
-            Err(anyhow::anyhow!(""))
+            Err(anyhow::anyhow!("Connection not found"))
         }
     }
 }

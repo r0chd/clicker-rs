@@ -21,7 +21,7 @@ categories = [
 ]
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/r0chd/wl-clipboard-rs"
+repository = "https://github.com/r0chd/wl-clicker-rs"
 version = "0.1.0"
 description = "Idle daemon with conditional timeouts and built in audio inhibitor"
 readme = "README.md"

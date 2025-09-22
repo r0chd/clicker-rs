@@ -4,13 +4,13 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Profile {
     #[serde(default)]
     pub keys: HashMap<String, KeyConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct KeyConfig {
     #[serde(default)]
     pub cps: u32,
