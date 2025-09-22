@@ -1,0 +1,15 @@
+[package]
+name = "daemon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wayland-client = "0.31.11"
+tvix_serde = { git = "https://code.tvl.fyi/depot.git", rev = "a4935331b134eabe169495c73f3a0b60411b59e3", package = "tvix-serde" }
+wayland-protocols = "0.32.9"
+serde = { version = "1.0.226", features = ["rc"], default-features = false }
+env_logger = { version = "0.11.6", default-features = false }
+log = "0.4.25"
+anyhow = "1.0.100"
+clap = { version = "4.5.48", features = ["derive"] }
+common = { workspace = true }
