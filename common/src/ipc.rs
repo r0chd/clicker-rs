@@ -31,7 +31,7 @@ pub enum IpcRequest {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum IpcResponse {
     Profile(Profile),
-    AllProfiles(HashMap<String, Profile>),
+    AllProfiles(Vec<Profile>),
     Ok,
     Error(String),
 }

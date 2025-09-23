@@ -11,5 +11,6 @@ readme.workspace = true
 
 [dependencies]
 anyhow = { version = "1.0.100", default-features = false }
+evdev = "0.13.2"
 serde = { version = "1.0.226", features = ["rc"], default-features = false }
 serde_json = "1.0.145"

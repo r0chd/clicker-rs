@@ -42,61 +42,36 @@ pub struct KeyConfig {
     pub jitter: u32,
 }
 
-fn format_profiles_pretty(profiles: &HashMap<String, Profile>) -> String {
+fn format_profiles_pretty(profiles: &Vec<Profile>) -> String {
     let mut output = String::new();
 
     if profiles.is_empty() {
         return "No profiles found.".to_string();
     }
 
-    for (name, profile) in profiles {
-        output.push_str(&format!("\x1b[34m{}\x1b[0m\n", name));
-        for (key, config) in &profile.keys {
-            output.push_str(&format!(
-                "  {} → {} CPS{}{}\n",
-                key,
-                config.cps,
-                if config.toggle { " (toggle)" } else { "" },
-                if config.jitter > 0 {
-                    &format!(" ±{} jitter", config.jitter)
-                } else {
-                    ""
-                }
-            ));
-        }
-        output.push('\n');
+    for profile in profiles {
+        output.push_str(&format_profile_pretty(profile));
+        output.push_str("\n");
     }
 
     output.trim_end().to_string()
 }
 
-fn format_profile_pretty(name: &str, profile: &Profile) -> String {
+fn format_profile_pretty(profile: &Profile) -> String {
     let mut output = String::new();
 
-    output.push_str(&format!("Profile: {}\n", name));
-    output.push_str(&format!("{}\n\n", "=".repeat(9 + name.len())));
-
-    if profile.keys.is_empty() {
-        output.push_str("No keys configured.");
-    } else {
-        for (key, config) in &profile.keys {
-            output.push_str(&format!(
-                "{:<12} │ {} CPS{}{}\n",
-                key,
-                config.cps,
-                if config.toggle {
-                    " │ Toggle mode"
-                } else {
-                    ""
-                },
-                if config.jitter > 0 {
-                    &format!(" │ ±{} jitter", config.jitter)
-                } else {
-                    ""
-                }
-            ));
+    output.push_str(&format!("\x1b[34m{}\x1b[0m\n", profile.name));
+    output.push_str(&format!(
+        "  {:?} → {} CPS{}{}\n",
+        profile.keys,
+        profile.cps,
+        if profile.toggle { " (toggle)" } else { "" },
+        if profile.jitter > 0 {
+            &format!(" ±{} jitter", profile.jitter)
+        } else {
+            ""
         }
-    }
+    ));
 
     output
 }
@@ -128,14 +103,7 @@ fn main() -> anyhow::Result<()> {
             if args.json {
                 writeln!(stdout, "{}", to_string_pretty(&profile)?)?;
             } else {
-                // You might need to pass the profile name here if available
-                // For now, using a placeholder
-                let profile_name = match &args.command {
-                    Cli::Show { name } => name.as_str(),
-                    Cli::Current => "Current Profile",
-                    _ => "Profile",
-                };
-                writeln!(stdout, "{}", format_profile_pretty(profile_name, &profile))?;
+                writeln!(stdout, "{}", format_profile_pretty(&profile))?;
             }
         }
     }
