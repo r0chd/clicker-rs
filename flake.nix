@@ -13,6 +13,7 @@
                 rust-analyzer-unwrapped
                 nixd
                 wayland
+                just
                 ;
             };
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath finalAttrs.buildInputs;

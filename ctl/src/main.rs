@@ -3,7 +3,6 @@ use clap::Parser;
 use common::Profile;
 use common::ipc::{Ipc, IpcResponse};
 use serde_json::to_string_pretty;
-use std::collections::HashMap;
 use std::io::{self, Write};
 
 #[derive(Parser, Debug)]
@@ -61,16 +60,29 @@ fn format_profile_pretty(profile: &Profile) -> String {
     let mut output = String::new();
 
     output.push_str(&format!("\x1b[34m{}\x1b[0m\n", profile.name));
+
+    let cps_display = if profile.cps.min == profile.cps.max {
+        format!("{}", profile.cps.min)
+    } else {
+        format!("{}-{}", profile.cps.min, profile.cps.max)
+    };
+
+    let jitter_display = if profile.jitter.x > 0 && profile.jitter.y > 0 {
+        if profile.jitter.x == profile.jitter.y {
+            format!(" ±{} jitter", profile.jitter.x)
+        } else {
+            format!(" ±{}x{} jitter", profile.jitter.x, profile.jitter.y)
+        }
+    } else {
+        "".to_string()
+    };
+
     output.push_str(&format!(
         "  {:?} → {} CPS{}{}\n",
         profile.keys,
-        profile.cps,
+        cps_display,
         if profile.toggle { " (toggle)" } else { "" },
-        if profile.jitter > 0 {
-            &format!(" ±{} jitter", profile.jitter)
-        } else {
-            ""
-        }
+        jitter_display
     ));
 
     output

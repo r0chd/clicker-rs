@@ -1,7 +1,6 @@
 use common::Profile;
 use serde::Deserialize;
-use std::{collections::HashMap, fs, path::PathBuf};
-use tvix_serde::from_str;
+use std::{fs, path::PathBuf};
 
 #[derive(Deserialize, Debug, Default)]
 pub struct Config {
@@ -17,12 +16,9 @@ impl Config {
             Self::path()?
         };
 
-        println!("hh");
         let nix_code = fs::read_to_string(&config_path)?;
-        println!("hh");
-        let config: Config =
-            from_str(&nix_code).map_err(|e| anyhow::anyhow!("tvix_serde failed: {e:?}"))?;
-        println!("hh {:?}", config);
+        let config: Config = tvix_serde::from_str(&nix_code)
+            .map_err(|e| anyhow::anyhow!("tvix_serde failed: {e:?}"))?;
 
         Ok(config)
     }

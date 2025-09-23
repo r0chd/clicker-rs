@@ -13,17 +13,19 @@ use env_logger::Builder;
 use evdev::{EventType, KeyCode};
 use log::LevelFilter;
 use std::{io::Write, os::fd::AsRawFd, path::PathBuf, sync::Arc};
+use std::{sync::LazyLock, time::Instant};
 use wayland_client::{
     Connection, Dispatch, QueueHandle, delegate_noop,
     globals::{GlobalList, GlobalListContents, registry_queue_init},
-    protocol::wl_registry,
+    protocol::{wl_pointer, wl_registry},
 };
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
 };
 
+static START: LazyLock<Instant> = LazyLock::new(Instant::now);
+
 struct WlClicker {
-    qh: QueueHandle<Self>,
     ipc: ipc::Ipc<Server>,
     config: config::Config,
     current_profile: Option<Profile>,
@@ -49,7 +51,6 @@ impl WlClicker {
         let virtual_pointer = virtual_pointer_manager.create_virtual_pointer(None, &qh, ());
 
         Self {
-            qh,
             ipc,
             config,
             virtual_pointer,
@@ -119,7 +120,7 @@ fn main() -> anyhow::Result<()> {
     let (event_sender, event_receiver) = calloop::channel::channel();
 
     scheduler.schedule(async move {
-        device::Devices::try_new()
+        device::KeyboardDevices::try_new()
             .unwrap()
             .iter_mut()
             .for_each(|device| {
@@ -135,11 +136,16 @@ fn main() -> anyhow::Result<()> {
                                 match ev.value() {
                                     0 => {
                                         log::info!("Key released {code:?}");
-                                        event_sender.send(KeyEvent::Released(code));
+                                        if let Err(e) = event_sender.send(KeyEvent::Released(code))
+                                        {
+                                            log::warn!("{e}");
+                                        }
                                     }
                                     1 => {
                                         log::info!("Key pressed {code:?}");
-                                        event_sender.send(KeyEvent::Pressed(code));
+                                        if let Err(e) = event_sender.send(KeyEvent::Pressed(code)) {
+                                            log::warn!("{e}");
+                                        }
                                     }
                                     _ => {}
                                 }
@@ -218,6 +224,19 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
+
+                state.virtual_pointer.button(
+                    START.elapsed().as_millis() as u32,
+                    0x110,
+                    wl_pointer::ButtonState::Pressed,
+                );
+                state.virtual_pointer.frame();
+                state.virtual_pointer.button(
+                    START.elapsed().as_millis() as u32,
+                    0x110,
+                    wl_pointer::ButtonState::Released,
+                );
+                state.virtual_pointer.frame();
             },
         )
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -271,12 +290,10 @@ fn main() -> anyhow::Result<()> {
             Err(err) => IpcResponse::Error(err.to_string()),
         };
 
-        let res = serde_json::to_string(&res).map_err(|e| {
+        if let Ok(res) = serde_json::to_string(&res).map_err(|e| {
             log::error!("Failed to serialize output data: {e}");
             anyhow::anyhow!(e)
-        });
-
-        if let Ok(res) = res {
+        }) {
             if let Some(conn) = state.ipc.get_mut(&fd) {
                 if let Err(e) = conn
                     .write_all(format!("{res}\n").as_bytes())

@@ -4,9 +4,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub struct Devices(Vec<Arc<Mutex<Device>>>);
+pub struct KeyboardDevices(Vec<Arc<Mutex<Device>>>);
 
-impl Devices {
+impl KeyboardDevices {
     pub fn try_new() -> anyhow::Result<Self> {
         let devices = fs::read_dir("/dev/input")?
             .filter_map(|entry| entry.map(|entry| entry.path()).ok())

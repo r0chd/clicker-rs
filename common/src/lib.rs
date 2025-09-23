@@ -14,11 +14,37 @@ pub struct Profile {
     )]
     pub keys: Vec<KeyCode>,
 
-    pub cps: u32,
+    pub cps: Cps,
     #[serde(default)]
     pub toggle: bool,
     #[serde(default)]
-    pub jitter: u32,
+    pub jitter: Jitter,
+
+    #[serde(default = "default_hold_to_click")]
+    pub hold_to_click: bool,
+
+    #[serde(default = "default_target_button")]
+    pub target_button: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct Cps {
+    pub min: u32,
+    pub max: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct Jitter {
+    pub x: u32,
+    pub y: u32,
+}
+
+fn default_target_button() -> String {
+    "MOUSE_LEFT".to_string()
+}
+
+fn default_hold_to_click() -> bool {
+    true
 }
 
 fn serialize_keys<S>(keys: &Vec<KeyCode>, s: S) -> Result<S::Ok, S::Error>

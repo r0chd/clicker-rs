@@ -1,4 +1,5 @@
 use crate::Profile;
+use nix::unistd::{Group, Uid, chown};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -7,7 +8,10 @@ use std::{
     marker::PhantomData,
     os::{
         fd::AsRawFd,
-        unix::net::{UnixListener, UnixStream},
+        unix::{
+            fs::PermissionsExt,
+            net::{UnixListener, UnixStream},
+        },
     },
     path::PathBuf,
     sync::LazyLock,
@@ -15,7 +19,7 @@ use std::{
 
 static PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut path = PathBuf::from(env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set"));
-    path.push("mox/.wl-clicker-rs.sock");
+    path.push("wl-clicker-rs/.wl-clicker-rs.sock");
 
     path
 });
@@ -116,11 +120,14 @@ impl Ipc<Client> {
 
 impl Ipc<Server> {
     pub fn server() -> anyhow::Result<Self> {
-        if let Ok(output) = std::process::Command::new("pidof").arg("moxpaper").output() {
+        if let Ok(output) = std::process::Command::new("pidof")
+            .arg("wl-clicker")
+            .output()
+        {
             if output.status.success() {
                 let pids = String::from_utf8_lossy(&output.stdout);
                 if pids.split_whitespace().count() > 1 {
-                    return Err(anyhow::anyhow!("moxpaper is already running"));
+                    return Err(anyhow::anyhow!("wl-clicker-rs is already running"));
                 }
             }
         }
@@ -135,6 +142,15 @@ impl Ipc<Server> {
         }
 
         let listener = UnixListener::bind(&*PATH)?;
+
+        let group = Group::from_name("wl-clicker")?
+            .ok_or_else(|| anyhow::anyhow!("Group 'wl-clicker' not found"))?;
+
+        let mut perms = std::fs::metadata(&*PATH)?.permissions();
+        perms.set_mode(0o660);
+        std::fs::set_permissions(&*PATH, perms)?;
+
+        chown(&*PATH, Some(Uid::from_raw(0)), Some(group.gid))?;
 
         Ok(Self {
             inner: IpcInner::Server(ServerData {
