@@ -442,6 +442,7 @@ dependencies = [
  "env_logger",
  "evdev",
  "log",
+ "rand",
  "serde",
  "serde_json",
  "tvix-eval",

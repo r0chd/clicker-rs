@@ -1,6 +1,7 @@
 use crate::{START, WlClicker};
 use calloop::timer::{TimeoutAction, Timer};
 use common::Cps;
+use rand::prelude::*;
 use std::time::Duration;
 use wayland_client::{globals::GlobalList, protocol::wl_pointer};
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
@@ -43,20 +44,28 @@ impl VirtualPointer {
         cps: Cps,
         handle: &calloop::LoopHandle<'_, WlClicker>,
     ) -> Option<calloop::RegistrationToken> {
-        let delay = Duration::from_millis(1000 / cps.min);
+        let mut rng = rand::rng();
+        let cps_candidates = (cps.min..cps.max).collect::<Vec<_>>();
+        let random = cps_candidates.choose(&mut rng);
+
+        let delay = Duration::from_millis(1000 / random.unwrap_or(&cps.min));
         let timer = Timer::from_duration(delay);
 
-        handle
-            .insert_source(timer, move |_, (), state| {
-                state.virtual_pointer.click();
+        match handle.insert_source(timer, move |_, (), state| {
+            state.virtual_pointer.click();
 
-                match state.current_profile.as_ref() {
-                    Some(profile) => {
-                        TimeoutAction::ToDuration(Duration::from_millis(1000 / profile.cps.min))
-                    }
-                    None => TimeoutAction::Drop,
+            match state.current_profile.as_ref() {
+                Some(profile) => {
+                    TimeoutAction::ToDuration(Duration::from_millis(1000 / profile.cps.min))
                 }
-            })
-            .ok()
+                None => TimeoutAction::Drop,
+            }
+        }) {
+            Ok(handle) => Some(handle),
+            Err(e) => {
+                log::warn!("{e}");
+                None
+            }
+        }
     }
 }

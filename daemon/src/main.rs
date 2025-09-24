@@ -132,14 +132,14 @@ fn main() -> anyhow::Result<()> {
 
                                 match ev.value() {
                                     0 => {
-                                        log::info!("Key released {code:?}");
+                                        log::debug!("Key released {code:?}");
                                         if let Err(e) = event_sender.send(KeyEvent::Released(code))
                                         {
                                             log::warn!("{e}");
                                         }
                                     }
                                     1 => {
-                                        log::info!("Key pressed {code:?}");
+                                        log::debug!("Key pressed {code:?}");
                                         if let Err(e) = event_sender.send(KeyEvent::Pressed(code)) {
                                             log::warn!("{e}");
                                         }
@@ -168,6 +168,22 @@ fn main() -> anyhow::Result<()> {
                 let Some(current_profile) = state.current_profile.as_ref() else {
                     return;
                 };
+
+                let log_profile_details = |activated: bool| {
+                    log::info!(
+                        "Profile '{}' {} (toggle={}, keys={:?}, cps={:?})",
+                        current_profile.name,
+                        if activated {
+                            "activated"
+                        } else {
+                            "deactivated"
+                        },
+                        current_profile.toggle,
+                        current_profile.keys,
+                        current_profile.cps,
+                    );
+                };
+
                 match event {
                     KeyEvent::Pressed(key) => {
                         if !state.pressed_keys.contains(&key) {
@@ -181,26 +197,26 @@ fn main() -> anyhow::Result<()> {
 
                             if all_keys_pressed {
                                 if let Some(registration_token) = state.registration_token.take() {
+                                    log_profile_details(false);
                                     state.loop_handle.remove(registration_token);
-                                    log::info!("Profile deactivated");
                                 } else {
+                                    log_profile_details(true);
                                     state.registration_token =
                                         state.virtual_pointer.schedule_clicks(
                                             current_profile.cps.clone(),
                                             &state.loop_handle,
                                         );
-                                    log::info!("Profile activated",);
                                 }
                             }
                         } else {
                             if current_profile.keys.contains(&key) {
                                 if state.registration_token.is_none() {
+                                    log_profile_details(true);
                                     state.registration_token =
                                         state.virtual_pointer.schedule_clicks(
                                             current_profile.cps.clone(),
                                             &state.loop_handle,
                                         );
-                                    log::info!("Profile activated");
                                 }
                             }
                         }
@@ -220,13 +236,13 @@ fn main() -> anyhow::Result<()> {
                         if let Some(registration_token) = state.registration_token.take()
                             && !still_pressed
                         {
+                            log_profile_details(false);
                             state.loop_handle.remove(registration_token);
-                            log::info!("Profile deactivated");
                         } else if state.registration_token.is_none() && still_pressed {
+                            log_profile_details(true);
                             state.registration_token = state
                                 .virtual_pointer
                                 .schedule_clicks(current_profile.cps.clone(), &state.loop_handle);
-                            log::info!("Profile activated");
                         }
                     }
                 }
@@ -247,40 +263,64 @@ fn main() -> anyhow::Result<()> {
 
     event_loop.handle().insert_source(source, |_, _, state| {
         let fd = state.ipc.accept_connection().as_raw_fd();
-        log::info!("Connection added");
 
         let req = state.ipc.handle_stream_data(fd);
-
         let res = match req {
             Ok(IpcRequest::GetAllProfiles) => {
+                log::info!("IPC: GetAllProfiles requested");
                 IpcResponse::AllProfiles(state.config.profiles.clone())
             }
-            Ok(IpcRequest::GetCurrentProfile) => match state.current_profile.as_ref() {
-                Some(profile) => IpcResponse::Profile(profile.clone()),
-                None => IpcResponse::Error("No profile selected".to_string()),
-            },
-            Ok(IpcRequest::GetProfile { name }) => match state
-                .config
-                .profiles
-                .iter()
-                .find(|profile| profile.name == name)
-            {
-                Some(profile) => IpcResponse::Profile(profile.to_owned()),
-                None => IpcResponse::Error(format!("Profile `{name}` doesn't exist")),
-            },
-            Ok(IpcRequest::SwitchProfile { name }) => match state
-                .config
-                .profiles
-                .iter()
-                .find(|profile| profile.name == name)
-            {
-                Some(profile) => {
-                    state.current_profile = Some(profile.clone());
-                    IpcResponse::Ok
+            Ok(IpcRequest::GetCurrentProfile) => {
+                log::info!("IPC: GetCurrentProfile requested");
+                match state.current_profile.as_ref() {
+                    Some(profile) => {
+                        log::info!("IPC: Current profile is '{}'", profile.name);
+                        IpcResponse::Profile(profile.clone())
+                    }
+                    None => {
+                        log::warn!("IPC: No current profile set");
+                        IpcResponse::Error("No profile selected".to_string())
+                    }
                 }
-                None => IpcResponse::Error(format!("Profile `{name}` doesn't exist")),
-            },
-            Err(err) => IpcResponse::Error(err.to_string()),
+            }
+            Ok(IpcRequest::GetProfile { name }) => {
+                log::info!("IPC: GetProfile requested for '{}'", name);
+                match state
+                    .config
+                    .profiles
+                    .iter()
+                    .find(|profile| profile.name == name)
+                {
+                    Some(profile) => IpcResponse::Profile(profile.to_owned()),
+                    None => {
+                        log::warn!("IPC: Profile '{}' not found", name);
+                        IpcResponse::Error(format!("Profile `{name}` doesn't exist"))
+                    }
+                }
+            }
+            Ok(IpcRequest::SwitchProfile { name }) => {
+                log::info!("IPC: SwitchProfile requested to '{}'", name);
+                match state
+                    .config
+                    .profiles
+                    .iter()
+                    .find(|profile| profile.name == name)
+                {
+                    Some(profile) => {
+                        state.current_profile = Some(profile.clone());
+                        log::info!("IPC: Switched to profile '{}'", profile.name);
+                        IpcResponse::Ok
+                    }
+                    None => {
+                        log::warn!("IPC: Failed to switch, profile '{}' not found", name);
+                        IpcResponse::Error(format!("Profile `{name}` doesn't exist"))
+                    }
+                }
+            }
+            Err(err) => {
+                log::error!("IPC: Failed to parse request: {err}");
+                IpcResponse::Error(err.to_string())
+            }
         };
 
         if let Ok(res) = serde_json::to_string(&res).map_err(|e| {
