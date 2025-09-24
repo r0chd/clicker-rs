@@ -29,14 +29,14 @@ pub struct Profile {
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Cps {
-    pub min: u32,
-    pub max: u32,
+    pub min: u64,
+    pub max: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Jitter {
-    pub x: u32,
-    pub y: u32,
+    pub x: u64,
+    pub y: u64,
 }
 
 fn default_target_button() -> String {

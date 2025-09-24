@@ -1,8 +1,9 @@
 mod config;
 mod device;
+mod virtual_pointer;
 
 use async_std::task;
-use calloop::{EventLoop, generic::Generic};
+use calloop::{EventLoop, LoopHandle, RegistrationToken, generic::Generic};
 use calloop_wayland_source::WaylandSource;
 use clap::Parser;
 use common::{
@@ -14,10 +15,11 @@ use evdev::{EventType, KeyCode};
 use log::LevelFilter;
 use std::{io::Write, os::fd::AsRawFd, path::PathBuf, sync::Arc};
 use std::{sync::LazyLock, time::Instant};
+use virtual_pointer::VirtualPointer;
 use wayland_client::{
     Connection, Dispatch, QueueHandle, delegate_noop,
     globals::{GlobalList, GlobalListContents, registry_queue_init},
-    protocol::{wl_pointer, wl_registry},
+    protocol::wl_registry,
 };
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
@@ -30,8 +32,9 @@ struct WlClicker {
     config: config::Config,
     current_profile: Option<Profile>,
     pressed_keys: Vec<KeyCode>,
-    profile_active: bool,
-    virtual_pointer: zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
+    registration_token: Option<RegistrationToken>,
+    virtual_pointer: VirtualPointer,
+    loop_handle: LoopHandle<'static, Self>,
 }
 
 impl WlClicker {
@@ -40,23 +43,18 @@ impl WlClicker {
         qh: QueueHandle<Self>,
         ipc: ipc::Ipc<Server>,
         config: config::Config,
+        loop_handle: LoopHandle<'static, Self>,
     ) -> Self {
-        let virtual_pointer_manager = globals
-            .bind::<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, _, _>(
-                &qh,
-                1..=2,
-                (),
-            )
-            .expect("Compositor doesn't support zwlr_virtual_pointer_v1");
-        let virtual_pointer = virtual_pointer_manager.create_virtual_pointer(None, &qh, ());
+        let virtual_pointer = VirtualPointer::new(&globals, &qh);
 
         Self {
             ipc,
             config,
             virtual_pointer,
             pressed_keys: Vec::new(),
-            profile_active: false,
+            registration_token: None,
             current_profile: None,
+            loop_handle,
         }
     }
 }
@@ -104,13 +102,12 @@ fn main() -> anyhow::Result<()> {
     let conn = Connection::connect_to_env()?;
     let (globals, event_queue) = registry_queue_init(&conn)?;
 
+    let mut event_loop = EventLoop::try_new()?;
     let qh = event_queue.handle();
 
     let ipc = ipc::Ipc::server()?;
 
-    let mut wl_clicker = WlClicker::new(globals, qh, ipc, config);
-
-    let mut event_loop = EventLoop::try_new()?;
+    let mut wl_clicker = WlClicker::new(globals, qh, ipc, config, event_loop.handle());
 
     WaylandSource::new(conn, event_queue)
         .insert(event_loop.handle())
@@ -183,21 +180,26 @@ fn main() -> anyhow::Result<()> {
                                 .all(|profile_key| state.pressed_keys.contains(profile_key));
 
                             if all_keys_pressed {
-                                let new_state = !state.profile_active;
-                                state.profile_active = new_state;
-                                log::info!(
-                                    "Profile {}",
-                                    if new_state {
-                                        "activated"
-                                    } else {
-                                        "deactivated"
-                                    }
-                                );
+                                if let Some(registration_token) = state.registration_token.take() {
+                                    state.loop_handle.remove(registration_token);
+                                    log::info!("Profile deactivated");
+                                } else {
+                                    state.registration_token =
+                                        state.virtual_pointer.schedule_clicks(
+                                            current_profile.cps.clone(),
+                                            &state.loop_handle,
+                                        );
+                                    log::info!("Profile activated",);
+                                }
                             }
                         } else {
                             if current_profile.keys.contains(&key) {
-                                if !state.profile_active {
-                                    state.profile_active = true;
+                                if state.registration_token.is_none() {
+                                    state.registration_token =
+                                        state.virtual_pointer.schedule_clicks(
+                                            current_profile.cps.clone(),
+                                            &state.loop_handle,
+                                        );
                                     log::info!("Profile activated");
                                 }
                             }
@@ -215,28 +217,19 @@ fn main() -> anyhow::Result<()> {
                             .iter()
                             .any(|k| current_profile.keys.contains(k));
 
-                        if state.profile_active && !still_pressed {
-                            state.profile_active = false;
+                        if let Some(registration_token) = state.registration_token.take()
+                            && !still_pressed
+                        {
+                            state.loop_handle.remove(registration_token);
                             log::info!("Profile deactivated");
-                        } else if !state.profile_active && still_pressed {
-                            state.profile_active = true;
+                        } else if state.registration_token.is_none() && still_pressed {
+                            state.registration_token = state
+                                .virtual_pointer
+                                .schedule_clicks(current_profile.cps.clone(), &state.loop_handle);
                             log::info!("Profile activated");
                         }
                     }
                 }
-
-                state.virtual_pointer.button(
-                    START.elapsed().as_millis() as u32,
-                    0x110,
-                    wl_pointer::ButtonState::Pressed,
-                );
-                state.virtual_pointer.frame();
-                state.virtual_pointer.button(
-                    START.elapsed().as_millis() as u32,
-                    0x110,
-                    wl_pointer::ButtonState::Released,
-                );
-                state.virtual_pointer.frame();
             },
         )
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -308,7 +301,6 @@ fn main() -> anyhow::Result<()> {
     })?;
 
     event_loop.run(None, &mut wl_clicker, |_| {})?;
-    drop(event_loop);
 
     Ok(())
 }
