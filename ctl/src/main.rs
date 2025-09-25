@@ -73,7 +73,7 @@ fn format_profile_pretty(profile: &Profile) -> String {
 
     output.push_str(&format!(
         "  {:?} → {} CPS{}{}\n",
-        profile.keys,
+        profile.activation_keys,
         profile.cps.target,
         if profile.toggle { " (toggle)" } else { "" },
         jitter_display

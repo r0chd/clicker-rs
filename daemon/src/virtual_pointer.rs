@@ -136,7 +136,7 @@ impl VirtualPointer {
 
                         let mut rng = rand::rng();
                         let jitter_range = (base_interval as f64 * 0.25) as i64;
-                        let jitter = rng.gen_range(-jitter_range..=jitter_range);
+                        let jitter = rng.random_range(-jitter_range..=jitter_range);
                         let final_interval = (base_interval as i64 + jitter).max(1) as u64;
 
                         TimeoutAction::ToDuration(Duration::from_millis(final_interval))

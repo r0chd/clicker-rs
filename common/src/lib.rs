@@ -9,13 +9,19 @@ pub struct Profile {
     pub name: String,
 
     #[serde(
-        serialize_with = "serialize_keys",
-        deserialize_with = "deserialize_keys"
+        serialize_with = "serialize_activation_keys",
+        deserialize_with = "deserialize_activation_keys"
     )]
-    pub keys: Vec<KeyCode>,
+    pub activation_keys: Vec<KeyCode>,
+    #[serde(
+        serialize_with = "serialize_repeat_key",
+        deserialize_with = "deserialize_repeat_key",
+        default = "default_repeat_key"
+    )]
+    pub repeat_key: KeyCode,
 
     pub cps: Cps,
-    #[serde(default)]
+    #[serde(default = "default_toggle")]
     pub toggle: bool,
     #[serde(default)]
     pub jitter: f32,
@@ -25,6 +31,14 @@ pub struct Profile {
 
     #[serde(default = "default_target_button")]
     pub target_button: String,
+}
+
+fn default_toggle() -> bool {
+    true
+}
+
+fn default_repeat_key() -> KeyCode {
+    KeyCode::BTN_LEFT
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -46,7 +60,22 @@ fn default_hold_to_click() -> bool {
     true
 }
 
-fn serialize_keys<S>(keys: &Vec<KeyCode>, s: S) -> Result<S::Ok, S::Error>
+fn serialize_repeat_key<S>(key: &KeyCode, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    format!("{key:?}").serialize(s)
+}
+
+fn deserialize_repeat_key<'de, D>(d: D) -> Result<KeyCode, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let str = String::deserialize(d)?;
+    KeyCode::from_str(&str).map_err(serde::de::Error::custom)
+}
+
+fn serialize_activation_keys<S>(keys: &Vec<KeyCode>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -54,7 +83,7 @@ where
     strs.serialize(s)
 }
 
-fn deserialize_keys<'de, D>(d: D) -> Result<Vec<KeyCode>, D::Error>
+fn deserialize_activation_keys<'de, D>(d: D) -> Result<Vec<KeyCode>, D::Error>
 where
     D: Deserializer<'de>,
 {

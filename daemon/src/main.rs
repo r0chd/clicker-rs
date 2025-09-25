@@ -123,6 +123,43 @@ fn main() -> anyhow::Result<()> {
     let (event_sender, event_receiver) = calloop::channel::channel();
 
     scheduler.schedule(async move {
+        device::MouseDevices::try_new()
+            .unwrap()
+            .iter_mut()
+            .for_each(|device| {
+                let device = Arc::clone(&device);
+                let event_sender = event_sender.clone();
+                task::spawn(async move {
+                    let mut device = device.lock().unwrap();
+                    loop {
+                        if let Ok(events) = device.fetch_events() {
+                            for ev in events {
+                                let EventType::KEY = ev.event_type() else {
+                                    continue;
+                                };
+
+                                let code = KeyCode::new(ev.code());
+                                let key_event = match ev.value() {
+                                    0 => {
+                                        log::debug!("Mouse released {code:?}");
+                                        KeyEvent::Released(code)
+                                    }
+                                    1 => {
+                                        log::debug!("Mouse pressed {code:?}");
+                                        KeyEvent::Pressed(code)
+                                    }
+                                    _ => continue,
+                                };
+
+                                if let Err(e) = event_sender.send(key_event) {
+                                    log::warn!("{e}");
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+
         device::KeyboardDevices::try_new()
             .unwrap()
             .iter_mut()
@@ -132,25 +169,27 @@ fn main() -> anyhow::Result<()> {
                 task::spawn(async move {
                     let mut device = device.lock().unwrap();
                     loop {
-                        for ev in device.fetch_events().unwrap() {
-                            if let EventType::KEY = ev.event_type() {
-                                let code = KeyCode::new(ev.code());
+                        if let Ok(events) = device.fetch_events() {
+                            for ev in events {
+                                let EventType::KEY = ev.event_type() else {
+                                    continue;
+                                };
 
-                                match ev.value() {
+                                let code = KeyCode::new(ev.code());
+                                let key_event = match ev.value() {
                                     0 => {
                                         log::debug!("Key released {code:?}");
-                                        if let Err(e) = event_sender.send(KeyEvent::Released(code))
-                                        {
-                                            log::warn!("{e}");
-                                        }
+                                        KeyEvent::Released(code)
                                     }
                                     1 => {
                                         log::debug!("Key pressed {code:?}");
-                                        if let Err(e) = event_sender.send(KeyEvent::Pressed(code)) {
-                                            log::warn!("{e}");
-                                        }
+                                        KeyEvent::Pressed(code)
                                     }
-                                    _ => {}
+                                    _ => continue,
+                                };
+
+                                if let Err(e) = event_sender.send(key_event) {
+                                    log::warn!("{e}");
                                 }
                             }
                         }
@@ -185,7 +224,7 @@ fn main() -> anyhow::Result<()> {
                             "deactivated"
                         },
                         current_profile.toggle,
-                        current_profile.keys,
+                        current_profile.activation_keys,
                         current_profile.cps,
                         current_profile.jitter
                     );
@@ -193,56 +232,53 @@ fn main() -> anyhow::Result<()> {
 
                 match event {
                     KeyEvent::Pressed(key) => {
-                        if !state.pressed_keys.contains(&key) {
+
+                        if state.pressed_keys.contains(&key) {
+                        let all_keys_pressed = current_profile
+                            .activation_keys
+                            .iter()
+                            .all(|profile_key| state.pressed_keys.contains(profile_key));
+                            if all_keys_pressed {
+                                log_profile_details(false);
+                            }
+                            state.pressed_keys.retain(|pressed_key| pressed_key != &key);
+                        } else if key != current_profile.repeat_key {
                             state.pressed_keys.push(key);
                         }
-                        if current_profile.toggle {
-                            let all_keys_pressed = current_profile
-                                .keys
-                                .iter()
-                                .all(|profile_key| state.pressed_keys.contains(profile_key));
 
-                            if all_keys_pressed {
-                                if let Some(registration_token) = state.registration_token.take() {
-                                    log_profile_details(false);
-                                    state.loop_handle.remove(registration_token);
-                                } else {
-                                    log_profile_details(true);
-                                    state.registration_token =
-                                        state.virtual_pointer.schedule_clicks(&state.loop_handle);
-                                }
-                            }
-                        } else {
-                            if current_profile.keys.contains(&key) {
-                                if state.registration_token.is_none() {
-                                    log_profile_details(true);
-                                    state.registration_token =
-                                        state.virtual_pointer.schedule_clicks(&state.loop_handle);
-                                }
+                        let all_keys_pressed = current_profile
+                            .activation_keys
+                            .iter()
+                            .all(|profile_key| state.pressed_keys.contains(profile_key));
+
+                        if all_keys_pressed {
+                            if current_profile.repeat_key == key {
+                                log::info!(
+                                    "Autoclicker started using profile '{}' with repeat key {:?} (CPS={:?}, jitter={:?})",
+                                    current_profile.name,
+                                    current_profile.repeat_key,
+                                    current_profile.cps,
+                                    current_profile.jitter
+                                );
+                                state.registration_token =
+                                    state.virtual_pointer.schedule_clicks(&state.loop_handle);
+                            } else {
+                                log_profile_details(true);
                             }
                         }
                     }
                     KeyEvent::Released(key) => {
-                        if let Some(pos) = state.pressed_keys.iter().position(|&k| k == key) {
-                            state.pressed_keys.remove(pos);
-                        }
-                        if current_profile.toggle {
-                            return;
-                        }
-                        let still_pressed = state
-                            .pressed_keys
-                            .iter()
-                            .any(|k| current_profile.keys.contains(k));
-
-                        if let Some(registration_token) = state.registration_token.take()
-                            && !still_pressed
-                        {
-                            log_profile_details(false);
-                            state.loop_handle.remove(registration_token);
-                        } else if state.registration_token.is_none() && still_pressed {
-                            log_profile_details(true);
-                            state.registration_token =
-                                state.virtual_pointer.schedule_clicks(&state.loop_handle);
+                        if key == current_profile.repeat_key {
+                            if let Some(registration_token) = state.registration_token.take() {
+                                log::info!(
+                                    "Autoclicker stopped using profile '{}' with repeat key {:?} (CPS={:?}, jitter={:?})",
+                                    current_profile.name,
+                                    current_profile.repeat_key,
+                                    current_profile.cps,
+                                    current_profile.jitter
+                                );
+                                state.loop_handle.remove(registration_token);
+                            }
                         }
                     }
                 }
