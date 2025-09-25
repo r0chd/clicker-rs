@@ -28,9 +28,6 @@ pub struct Profile {
 
     #[serde(default = "default_hold_to_click")]
     pub hold_to_click: bool,
-
-    #[serde(default = "default_target_button")]
-    pub target_button: String,
 }
 
 fn default_toggle() -> bool {
@@ -50,10 +47,6 @@ pub struct Cps {
 
 fn default_std_dev() -> f32 {
     1.5
-}
-
-fn default_target_button() -> String {
-    "MOUSE_LEFT".to_string()
 }
 
 fn default_hold_to_click() -> bool {
