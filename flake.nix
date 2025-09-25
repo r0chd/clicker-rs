@@ -23,18 +23,18 @@
       });
 
       packages = tooling.lib.forAllSystems (pkgs: {
-        wl-clicker-rs = pkgs.callPackage ./nix/package.nix {
+        clicker-rs = pkgs.callPackage ./nix/package.nix {
           rustPlatform = pkgs.makeRustPlatform {
             cargo = pkgs.rustToolchain;
             rustc = pkgs.rustToolchain;
           };
         };
-        default = self.packages.${pkgs.stdenv.hostPlatform.system}.wl-clicker-rs;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.clicker-rs;
       });
 
       nixosModules = {
-        wl-clicker-rs = import ./nix/nixos.nix;
-        default = self.nixosModules.wl-clicker-rs;
+        clicker-rs = import ./nix/nixos.nix;
+        default = self.nixosModules.clicker-rs;
       };
     };
 }

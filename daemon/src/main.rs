@@ -4,7 +4,6 @@ mod virtual_pointer;
 
 use async_std::task;
 use calloop::{EventLoop, LoopHandle, RegistrationToken, generic::Generic};
-use calloop_wayland_source::WaylandSource;
 use clap::Parser;
 use common::{
     Profile,
@@ -14,20 +13,9 @@ use env_logger::Builder;
 use evdev::{EventType, KeyCode};
 use log::LevelFilter;
 use std::{io::Write, os::fd::AsRawFd, path::PathBuf, sync::Arc};
-use std::{sync::LazyLock, time::Instant};
 use virtual_pointer::VirtualPointer;
-use wayland_client::{
-    Connection, Dispatch, QueueHandle, delegate_noop,
-    globals::{GlobalList, GlobalListContents, registry_queue_init},
-    protocol::wl_registry,
-};
-use wayland_protocols_wlr::virtual_pointer::v1::client::{
-    zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
-};
 
-static START: LazyLock<Instant> = LazyLock::new(Instant::now);
-
-struct WlClicker {
+struct Clicker {
     ipc: ipc::Ipc<Server>,
     config: config::Config,
     current_profile: Option<Profile>,
@@ -37,15 +25,13 @@ struct WlClicker {
     loop_handle: LoopHandle<'static, Self>,
 }
 
-impl WlClicker {
+impl Clicker {
     fn new(
-        globals: GlobalList,
-        qh: QueueHandle<Self>,
         ipc: ipc::Ipc<Server>,
         config: config::Config,
         loop_handle: LoopHandle<'static, Self>,
     ) -> Self {
-        let virtual_pointer = VirtualPointer::new(&globals, &qh);
+        let virtual_pointer = VirtualPointer::try_new().unwrap();
 
         let current_profile = config
             .profiles
@@ -64,21 +50,6 @@ impl WlClicker {
         }
     }
 }
-
-impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for WlClicker {
-    fn event(
-        _: &mut Self,
-        _: &wl_registry::WlRegistry,
-        _: <wl_registry::WlRegistry as wayland_client::Proxy>::Event,
-        _: &GlobalListContents,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-delegate_noop!(WlClicker: zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1);
-delegate_noop!(WlClicker: zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1);
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -105,19 +76,11 @@ fn main() -> anyhow::Result<()> {
 
     let config = config::Config::load(cli.config).unwrap();
 
-    let conn = Connection::connect_to_env()?;
-    let (globals, event_queue) = registry_queue_init(&conn)?;
-
     let mut event_loop = EventLoop::try_new()?;
-    let qh = event_queue.handle();
 
     let ipc = ipc::Ipc::server()?;
 
-    let mut wl_clicker = WlClicker::new(globals, qh, ipc, config, event_loop.handle());
-
-    WaylandSource::new(conn, event_queue)
-        .insert(event_loop.handle())
-        .map_err(|e| anyhow::anyhow!("Failed to insert Wayland source: {}", e))?;
+    let mut clicker = Clicker::new(ipc, config, event_loop.handle());
 
     let (executor, scheduler) = calloop::futures::executor()?;
     let (event_sender, event_receiver) = calloop::channel::channel();
@@ -288,7 +251,7 @@ fn main() -> anyhow::Result<()> {
 
     let source = unsafe {
         Generic::new(
-            calloop::generic::FdWrapper::new(wl_clicker.ipc.get_listener().as_raw_fd()),
+            calloop::generic::FdWrapper::new(clicker.ipc.get_listener().as_raw_fd()),
             calloop::Interest {
                 readable: true,
                 writable: false,
@@ -376,7 +339,7 @@ fn main() -> anyhow::Result<()> {
         Ok(calloop::PostAction::Continue)
     })?;
 
-    event_loop.run(None, &mut wl_clicker, |_| {})?;
+    event_loop.run(None, &mut clicker, |_| {})?;
 
     Ok(())
 }

@@ -6,7 +6,7 @@ use serde_json::to_string_pretty;
 use std::io::{self, Write};
 
 #[derive(Parser, Debug)]
-#[command(name = "wl-clicker", about = "Control the wl-clicker-rs daemon")]
+#[command(name = "clicker", about = "Control the clicker-rs daemon")]
 pub struct Args {
     #[command(subcommand)]
     pub command: Cli,

@@ -19,7 +19,7 @@ use std::{
 
 static PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut path = PathBuf::from(env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set"));
-    path.push("wl-clicker-rs/.wl-clicker-rs.sock");
+    path.push("clicker-rs/.clicker-rs.sock");
 
     path
 });
@@ -120,14 +120,11 @@ impl Ipc<Client> {
 
 impl Ipc<Server> {
     pub fn server() -> anyhow::Result<Self> {
-        if let Ok(output) = std::process::Command::new("pidof")
-            .arg("wl-clicker")
-            .output()
-        {
+        if let Ok(output) = std::process::Command::new("pidof").arg("clickerd").output() {
             if output.status.success() {
                 let pids = String::from_utf8_lossy(&output.stdout);
                 if pids.split_whitespace().count() > 1 {
-                    return Err(anyhow::anyhow!("wl-clicker-rs is already running"));
+                    return Err(anyhow::anyhow!("clicker-rs is already running"));
                 }
             }
         }
@@ -143,8 +140,8 @@ impl Ipc<Server> {
 
         let listener = UnixListener::bind(&*PATH)?;
 
-        let group = Group::from_name("wl-clicker")?
-            .ok_or_else(|| anyhow::anyhow!("Group 'wl-clicker' not found"))?;
+        let group = Group::from_name("clicker")?
+            .ok_or_else(|| anyhow::anyhow!("Group 'clicker' not found"))?;
 
         let mut perms = std::fs::metadata(&*PATH)?.permissions();
         perms.set_mode(0o660);

@@ -8,7 +8,7 @@ let
   cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
 in
 rustPlatform.buildRustPackage {
-  pname = "wl-clicker-rs";
+  pname = "clicker-rs";
   inherit (cargoToml.workspace.package) version;
 
   cargoLock = {
@@ -48,16 +48,16 @@ rustPlatform.buildRustPackage {
   '';
 
   installPhase = ''
-    install -Dm755 target/release/daemon $out/bin/wl-clickerd
-    install -Dm755 target/release/ctl $out/bin/wl-clicker
+    install -Dm755 target/release/daemon $out/bin/clickerd
+    install -Dm755 target/release/ctl $out/bin/clicker
   '';
 
   meta = {
     description = "Mox desktop environment notification system";
-    homepage = "https://github.com/r0chd/wl-clicker-rs";
+    homepage = "https://github.com/r0chd/clicker-rs";
     license = lib.licenses.mit;
     maintainers = builtins.attrValues { inherit (lib.maintainers) r0chd; };
     platforms = lib.platforms.linux;
-    mainProgram = "wl-clickerd";
+    mainProgram = "clickerd";
   };
 }

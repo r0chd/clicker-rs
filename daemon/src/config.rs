@@ -26,7 +26,7 @@ impl Config {
     pub fn path() -> anyhow::Result<PathBuf> {
         let config_dir = PathBuf::from("/etc");
 
-        let config_dir_first = config_dir.join("wl-clicker-rs.nix");
+        let config_dir_first = config_dir.join("clicker-rs.nix");
         if config_dir_first.exists() {
             log::info!("Configuration found at {}", config_dir_first.display());
             return Ok(config_dir_first);
@@ -34,7 +34,7 @@ impl Config {
             log::warn!("Configuration not found at {}", config_dir_first.display());
         }
 
-        let config_dir_second = config_dir.join("wl-clicker-rs").join("default.nix");
+        let config_dir_second = config_dir.join("clicker-rs").join("default.nix");
         if config_dir_second.exists() {
             log::info!("Configuration found at {}", config_dir_second.display());
             Ok(config_dir_second)

@@ -1,16 +1,17 @@
-# wl-clicker-rs
+# clicker-rs
 
-Autoclicker for wayland with blackjack and hookers
+Autoclicker with blackjack and hookers
 
 ## Features
 
 - Multiple profiles
 - Global hotkeys
 - Clicks use Gaussian + Poisson timing with added mouse jitter for realistic, undetectable behavior
+- Display server agnostic
 
 ## Config Example
 
-configs can be found at `/etc/wl-clicker/default.nix` or `/etc/wl-clicker.nix`
+configs can be found at `/etc/clicker-rs/default.nix` or `/etc/clicker-rs.nix`
 
 ```nix
 {

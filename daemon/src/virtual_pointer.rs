@@ -1,80 +1,60 @@
-use crate::{START, WlClicker};
+use crate::Clicker;
 use calloop::timer::{TimeoutAction, Timer};
+use evdev::uinput::VirtualDevice;
+use evdev::{AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal, Poisson};
 use std::time::{Duration, Instant};
-use wayland_client::{globals::GlobalList, protocol::wl_pointer};
-use wayland_protocols_wlr::virtual_pointer::v1::client::{
-    zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
-};
+
+pub static POISSON_LAMBDA_FACTOR: f64 = 1.0;
 
 pub struct VirtualPointer {
-    pointer: zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
+    virtual_device: VirtualDevice,
     last_window_start: Option<Instant>,
     clicks_in_current_window: u32,
     current_window_target: u32,
+    rng: ThreadRng,
 }
 
 impl VirtualPointer {
-    pub fn new(globals: &GlobalList, qh: &wayland_client::QueueHandle<WlClicker>) -> Self {
-        let virtual_pointer_manager = globals
-            .bind::<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, _, _>(
-                &qh,
-                1..=2,
-                (),
-            )
-            .expect("Compositor doesn't support zwlr_virtual_pointer_v1");
-        let virtual_pointer = virtual_pointer_manager.create_virtual_pointer(None, &qh, ());
-        Self {
-            pointer: virtual_pointer,
+    pub fn try_new() -> anyhow::Result<Self> {
+        let mut keys = AttributeSet::new();
+        keys.insert(KeyCode::BTN_LEFT);
+        keys.insert(KeyCode::BTN_RIGHT);
+        keys.insert(KeyCode::BTN_MIDDLE);
+
+        let mut relative_axes = AttributeSet::new();
+        relative_axes.insert(RelativeAxisCode::REL_X);
+        relative_axes.insert(RelativeAxisCode::REL_Y);
+
+        let virtual_device = VirtualDevice::builder()?
+            .name("clicker-rs")
+            .with_keys(&keys)?
+            .with_relative_axes(&relative_axes)?
+            .build()?;
+
+        Ok(Self {
+            virtual_device,
             last_window_start: None,
             clicks_in_current_window: 0,
             current_window_target: 0,
-        }
+            rng: rand::rng(),
+        })
     }
 
-    pub fn jitter(&self, jitter: f32) {
-        let mut rng = rand::rng();
-        let normal_x = Normal::new(0.0, jitter as f32 / 3.0).unwrap();
-        let normal_y = Normal::new(0.0, jitter as f32 / 3.0).unwrap();
-        let jitter_x = loop {
-            let sample = normal_x.sample(&mut rng).round();
-            if sample >= -(jitter) && sample <= jitter {
-                break sample;
-            }
-        };
-        let jitter_y = loop {
-            let sample = normal_y.sample(&mut rng).round();
-            if sample >= -(jitter) && sample <= jitter {
-                break sample;
-            }
-        };
-        self.pointer.motion(
-            START.elapsed().as_millis() as u32,
-            jitter_x as f64,
-            jitter_y as f64,
-        );
-        self.pointer.frame();
-    }
-
-    pub fn click(&self) {
-        self.pointer.button(
-            START.elapsed().as_millis() as u32,
-            0x110,
-            wl_pointer::ButtonState::Pressed,
-        );
-        self.pointer.frame();
-        self.pointer.button(
-            START.elapsed().as_millis() as u32,
-            0x110,
-            wl_pointer::ButtonState::Released,
-        );
-        self.pointer.frame();
+    pub fn click(&mut self, button: KeyCode) {
+        println!("hey!");
+        self.virtual_device
+            .emit(&[
+                InputEvent::new_now(EventType::KEY.0, button.code(), 1),
+                InputEvent::new_now(EventType::KEY.0, button.code(), 0),
+            ])
+            .unwrap();
     }
 
     pub fn schedule_clicks(
         &mut self,
-        handle: &calloop::LoopHandle<'_, WlClicker>,
+        handle: &calloop::LoopHandle<'_, Clicker>,
     ) -> Option<calloop::RegistrationToken> {
         match handle.insert_source(Timer::immediate(), move |_, (), state| {
             let now = Instant::now();
@@ -97,7 +77,8 @@ impl VirtualPointer {
                         }
                     };
 
-                    let poisson = Poisson::new(window_average_cps as f64).unwrap();
+                    let poisson =
+                        Poisson::new(window_average_cps as f64 * POISSON_LAMBDA_FACTOR).unwrap();
                     let clicks_this_window = poisson.sample(&mut rng) as u32;
 
                     state.virtual_pointer.last_window_start = Some(now);
@@ -106,12 +87,10 @@ impl VirtualPointer {
                 }
             }
 
-            state.virtual_pointer.click();
-            state.virtual_pointer.clicks_in_current_window += 1;
-
             match state.current_profile.as_ref() {
                 Some(profile) => {
-                    state.virtual_pointer.jitter(profile.jitter);
+                    state.virtual_pointer.click(profile.repeat_key);
+                    state.virtual_pointer.clicks_in_current_window += 1;
 
                     let remaining_clicks = state
                         .virtual_pointer
