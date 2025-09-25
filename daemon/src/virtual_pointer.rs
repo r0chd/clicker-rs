@@ -62,10 +62,13 @@ impl VirtualPointer {
         handle: &calloop::LoopHandle<'_, WlClicker>,
     ) -> Option<calloop::RegistrationToken> {
         let mut rng = rand::rng();
-        let cps_candidates = (cps.min..cps.max).collect::<Vec<_>>();
-        let random = cps_candidates.choose(&mut rng);
+        let cps = if cps.min < cps.max {
+            rng.random_range(cps.min..=cps.max)
+        } else {
+            cps.min
+        };
 
-        let delay = Duration::from_millis(1000 / random.unwrap_or(&cps.min));
+        let delay = Duration::from_millis(1000 / cps);
         let timer = Timer::from_duration(delay);
 
         match handle.insert_source(timer, move |_, (), state| {
@@ -73,8 +76,15 @@ impl VirtualPointer {
 
             match state.current_profile.as_ref() {
                 Some(profile) => {
+                    let mut rng = rand::rng();
+                    let cps = if profile.cps.min < profile.cps.max {
+                        rng.random_range(profile.cps.min..=profile.cps.max)
+                    } else {
+                        profile.cps.min
+                    };
+
                     state.virtual_pointer.jitter(&profile.jitter);
-                    TimeoutAction::ToDuration(Duration::from_millis(1000 / profile.cps.min))
+                    TimeoutAction::ToDuration(Duration::from_millis(1000 / cps))
                 }
                 None => TimeoutAction::Drop,
             }

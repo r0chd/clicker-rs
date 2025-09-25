@@ -47,13 +47,19 @@ impl WlClicker {
     ) -> Self {
         let virtual_pointer = VirtualPointer::new(&globals, &qh);
 
+        let current_profile = config
+            .profiles
+            .iter()
+            .find(|profile| profile.name == "default")
+            .cloned();
+
         Self {
             ipc,
             config,
             virtual_pointer,
             pressed_keys: Vec::new(),
             registration_token: None,
-            current_profile: None,
+            current_profile,
             loop_handle,
         }
     }
@@ -171,7 +177,7 @@ fn main() -> anyhow::Result<()> {
 
                 let log_profile_details = |activated: bool| {
                     log::info!(
-                        "Profile '{}' {} (toggle={}, keys={:?}, cps={:?})",
+                        "Profile '{}' {} (toggle={}, keys={:?}, cps={:?}), jitter={:?}",
                         current_profile.name,
                         if activated {
                             "activated"
@@ -181,6 +187,7 @@ fn main() -> anyhow::Result<()> {
                         current_profile.toggle,
                         current_profile.keys,
                         current_profile.cps,
+                        current_profile.jitter
                     );
                 };
 
