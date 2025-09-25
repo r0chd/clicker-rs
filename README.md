@@ -1,6 +1,6 @@
 # wl-clicker-rs
 
-Feature rich autoclicker for wayland
+Autoclicker for wayland with blackjack and hookers
 
 ## Features
 
