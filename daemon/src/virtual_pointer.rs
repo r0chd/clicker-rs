@@ -1,6 +1,6 @@
 use crate::{START, WlClicker};
 use calloop::timer::{TimeoutAction, Timer};
-use common::Cps;
+use common::{Cps, Jitter};
 use rand::prelude::*;
 use std::time::Duration;
 use wayland_client::{globals::GlobalList, protocol::wl_pointer};
@@ -22,6 +22,23 @@ impl VirtualPointer {
         let virtual_pointer = virtual_pointer_manager.create_virtual_pointer(None, &qh, ());
 
         Self(virtual_pointer)
+    }
+
+    pub fn jitter(&self, jitter: &Jitter) {
+        let mut rng = rand::rng();
+
+        let jitter_x_candidates = (-jitter.x..jitter.x).collect::<Vec<_>>();
+        let random_x = jitter_x_candidates.choose(&mut rng);
+
+        let jitter_y_candidates = (-jitter.y..jitter.y).collect::<Vec<_>>();
+        let random_y = jitter_y_candidates.choose(&mut rng);
+
+        self.0.motion(
+            START.elapsed().as_millis() as u32,
+            *random_x.unwrap_or(&0) as f64,
+            *random_y.unwrap_or(&0) as f64,
+        );
+        self.0.frame();
     }
 
     pub fn click(&self) {
@@ -56,6 +73,7 @@ impl VirtualPointer {
 
             match state.current_profile.as_ref() {
                 Some(profile) => {
+                    state.virtual_pointer.jitter(&profile.jitter);
                     TimeoutAction::ToDuration(Duration::from_millis(1000 / profile.cps.min))
                 }
                 None => TimeoutAction::Drop,

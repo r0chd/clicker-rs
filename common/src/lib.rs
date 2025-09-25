@@ -35,8 +35,8 @@ pub struct Cps {
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Jitter {
-    pub x: u64,
-    pub y: u64,
+    pub x: i64,
+    pub y: i64,
 }
 
 fn default_target_button() -> String {
