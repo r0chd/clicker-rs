@@ -61,17 +61,11 @@ fn format_profile_pretty(profile: &Profile) -> String {
 
     output.push_str(&format!("\x1b[34m{}\x1b[0m\n", profile.name));
 
-    let cps_display = if profile.cps.min == profile.cps.max {
-        format!("{}", profile.cps.min)
-    } else {
-        format!("{}-{}", profile.cps.min, profile.cps.max)
-    };
-
-    let jitter_display = if profile.jitter.x > 0 && profile.jitter.y > 0 {
-        if profile.jitter.x == profile.jitter.y {
-            format!(" ±{} jitter", profile.jitter.x)
+    let jitter_display = if profile.jitter > 0. && profile.jitter > 0. {
+        if profile.jitter == profile.jitter {
+            format!(" ±{} jitter", profile.jitter)
         } else {
-            format!(" ±{}x{} jitter", profile.jitter.x, profile.jitter.y)
+            format!(" ±{}x{} jitter", profile.jitter, profile.jitter)
         }
     } else {
         "".to_string()
@@ -80,7 +74,7 @@ fn format_profile_pretty(profile: &Profile) -> String {
     output.push_str(&format!(
         "  {:?} → {} CPS{}{}\n",
         profile.keys,
-        cps_display,
+        profile.cps.target,
         if profile.toggle { " (toggle)" } else { "" },
         jitter_display
     ));

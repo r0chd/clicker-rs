@@ -18,7 +18,7 @@ pub struct Profile {
     #[serde(default)]
     pub toggle: bool,
     #[serde(default)]
-    pub jitter: Jitter,
+    pub jitter: f32,
 
     #[serde(default = "default_hold_to_click")]
     pub hold_to_click: bool,
@@ -29,14 +29,13 @@ pub struct Profile {
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Cps {
-    pub min: u64,
-    pub max: u64,
+    pub target: f32,
+    #[serde(default = "default_std_dev")]
+    pub std_dev: f32,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct Jitter {
-    pub x: i64,
-    pub y: i64,
+fn default_std_dev() -> f32 {
+    1.5
 }
 
 fn default_target_button() -> String {

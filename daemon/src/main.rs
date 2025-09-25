@@ -209,10 +209,7 @@ fn main() -> anyhow::Result<()> {
                                 } else {
                                     log_profile_details(true);
                                     state.registration_token =
-                                        state.virtual_pointer.schedule_clicks(
-                                            current_profile.cps.clone(),
-                                            &state.loop_handle,
-                                        );
+                                        state.virtual_pointer.schedule_clicks(&state.loop_handle);
                                 }
                             }
                         } else {
@@ -220,10 +217,7 @@ fn main() -> anyhow::Result<()> {
                                 if state.registration_token.is_none() {
                                     log_profile_details(true);
                                     state.registration_token =
-                                        state.virtual_pointer.schedule_clicks(
-                                            current_profile.cps.clone(),
-                                            &state.loop_handle,
-                                        );
+                                        state.virtual_pointer.schedule_clicks(&state.loop_handle);
                                 }
                             }
                         }
@@ -247,9 +241,8 @@ fn main() -> anyhow::Result<()> {
                             state.loop_handle.remove(registration_token);
                         } else if state.registration_token.is_none() && still_pressed {
                             log_profile_details(true);
-                            state.registration_token = state
-                                .virtual_pointer
-                                .schedule_clicks(current_profile.cps.clone(), &state.loop_handle);
+                            state.registration_token =
+                                state.virtual_pointer.schedule_clicks(&state.loop_handle);
                         }
                     }
                 }
