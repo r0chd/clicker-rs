@@ -52,8 +52,11 @@ in
         # hardening
 
         # allow access to uinput
-        DeviceAllow = [ "/dev/uinput" ];
-        DevicePolicy = "closed";
+        #DeviceAllow = [
+        #  "/dev/uinput"
+        #  "/dev/input"
+        #];
+        #DevicePolicy = "closed";
 
         # allow creation of unix sockets
         RestrictAddressFamilies = [ "AF_UNIX" ];
@@ -65,7 +68,6 @@ in
         NoNewPrivileges = true;
         PrivateNetwork = true;
         PrivateTmp = true;
-        PrivateUsers = true;
         ProcSubset = "pid";
         ProtectClock = true;
         ProtectControlGroups = true;
@@ -74,9 +76,8 @@ in
         ProtectKernelLogs = true;
         ProtectKernelModules = true;
         ProtectKernelTunables = true;
-        ProtectProc = "invisible";
+        ProtectProc = "default";
         ProtectSystem = "strict";
-        RestrictNamespaces = true;
         RestrictRealtime = true;
         RestrictSUIDSGID = true;
         SystemCallArchitectures = "native";

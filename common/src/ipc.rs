@@ -1,9 +1,7 @@
 use crate::Profile;
-use nix::unistd::{Group, Uid, chown};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    env,
     io::{BufRead, BufReader, BufWriter, Write},
     marker::PhantomData,
     os::{
@@ -17,12 +15,7 @@ use std::{
     sync::LazyLock,
 };
 
-static PATH: LazyLock<PathBuf> = LazyLock::new(|| {
-    let mut path = PathBuf::from(env::var("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set"));
-    path.push("clicker-rs/.clicker-rs.sock");
-
-    path
-});
+static PATH: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from("/run/clicker-rs/clicker-rs.sock"));
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum IpcRequest {
@@ -140,14 +133,9 @@ impl Ipc<Server> {
 
         let listener = UnixListener::bind(&*PATH)?;
 
-        let group = Group::from_name("clicker")?
-            .ok_or_else(|| anyhow::anyhow!("Group 'clicker' not found"))?;
-
         let mut perms = std::fs::metadata(&*PATH)?.permissions();
         perms.set_mode(0o660);
         std::fs::set_permissions(&*PATH, perms)?;
-
-        chown(&*PATH, Some(Uid::from_raw(0)), Some(group.gid))?;
 
         Ok(Self {
             inner: IpcInner::Server(ServerData {

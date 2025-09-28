@@ -43,7 +43,6 @@ impl VirtualPointer {
     }
 
     pub fn click(&mut self, button: KeyCode) {
-        println!("hey!");
         self.virtual_device
             .emit(&[
                 InputEvent::new_now(EventType::KEY.0, button.code(), 1),

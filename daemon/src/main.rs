@@ -63,8 +63,14 @@ struct Cli {
 
 #[derive(Debug)]
 enum KeyEvent {
-    Pressed(KeyCode),
-    Released(KeyCode),
+    Pressed {
+        device_name: Arc<str>,
+        key_code: KeyCode,
+    },
+    Released {
+        device_name: Arc<str>,
+        key_code: KeyCode,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -94,6 +100,7 @@ fn main() -> anyhow::Result<()> {
                 let event_sender = event_sender.clone();
                 task::spawn(async move {
                     let mut device = device.lock().unwrap();
+                    let device_name: Arc<str> = device.name().unwrap_or_default().into();
                     loop {
                         if let Ok(events) = device.fetch_events() {
                             for ev in events {
@@ -104,12 +111,24 @@ fn main() -> anyhow::Result<()> {
                                 let code = KeyCode::new(ev.code());
                                 let key_event = match ev.value() {
                                     0 => {
-                                        log::debug!("Mouse released {code:?}");
-                                        KeyEvent::Released(code)
+                                        log::debug!(
+                                            "Mouse released {code:?} for device {}",
+                                            device_name
+                                        );
+                                        KeyEvent::Released {
+                                            device_name: Arc::clone(&device_name),
+                                            key_code: code,
+                                        }
                                     }
                                     1 => {
-                                        log::debug!("Mouse pressed {code:?}");
-                                        KeyEvent::Pressed(code)
+                                        log::debug!(
+                                            "Mouse pressed {code:?} for device {}",
+                                            device_name
+                                        );
+                                        KeyEvent::Pressed {
+                                            device_name: Arc::clone(&device_name),
+                                            key_code: code,
+                                        }
                                     }
                                     _ => continue,
                                 };
@@ -131,6 +150,7 @@ fn main() -> anyhow::Result<()> {
                 let event_sender = event_sender.clone();
                 task::spawn(async move {
                     let mut device = device.lock().unwrap();
+                    let device_name: Arc<str> = device.name().unwrap_or_default().into();
                     loop {
                         if let Ok(events) = device.fetch_events() {
                             for ev in events {
@@ -138,15 +158,27 @@ fn main() -> anyhow::Result<()> {
                                     continue;
                                 };
 
-                                let code = KeyCode::new(ev.code());
+                                let key_code = KeyCode::new(ev.code());
                                 let key_event = match ev.value() {
                                     0 => {
-                                        log::debug!("Key released {code:?}");
-                                        KeyEvent::Released(code)
+                                        log::debug!(
+                                            "Key released {key_code:?} for device {}",
+                                            device_name
+                                        );
+                                        KeyEvent::Released {
+                                            device_name: Arc::clone(&device_name),
+                                            key_code,
+                                        }
                                     }
                                     1 => {
-                                        log::debug!("Key pressed {code:?}");
-                                        KeyEvent::Pressed(code)
+                                        log::debug!(
+                                            "Key pressed {key_code:?} for device {}",
+                                            device_name
+                                        );
+                                        KeyEvent::Pressed {
+                                            device_name: Arc::clone(&device_name),
+                                            key_code,
+                                        }
                                     }
                                     _ => continue,
                                 };
@@ -194,9 +226,12 @@ fn main() -> anyhow::Result<()> {
                 };
 
                 match event {
-                    KeyEvent::Pressed(key) => {
+                    KeyEvent::Pressed{ device_name, key_code} => {
+                        if &*device_name == "clicker-rs" {
+                            return;
+                        }
 
-                        if state.pressed_keys.contains(&key) {
+                        if state.pressed_keys.contains(&key_code) {
                         let all_keys_pressed = current_profile
                             .activation_keys
                             .iter()
@@ -204,9 +239,9 @@ fn main() -> anyhow::Result<()> {
                             if all_keys_pressed {
                                 log_profile_details(false);
                             }
-                            state.pressed_keys.retain(|pressed_key| pressed_key != &key);
-                        } else if key != current_profile.repeat_key {
-                            state.pressed_keys.push(key);
+                            state.pressed_keys.retain(|pressed_key| pressed_key != &key_code);
+                        } else if key_code != current_profile.repeat_key {
+                            state.pressed_keys.push(key_code);
                         }
 
                         let all_keys_pressed = current_profile
@@ -215,7 +250,7 @@ fn main() -> anyhow::Result<()> {
                             .all(|profile_key| state.pressed_keys.contains(profile_key));
 
                         if all_keys_pressed {
-                            if current_profile.repeat_key == key {
+                            if current_profile.repeat_key == key_code {
                                 log::info!(
                                     "Autoclicker started using profile '{}' with repeat key {:?} (CPS={:?}, jitter={:?})",
                                     current_profile.name,
@@ -230,8 +265,12 @@ fn main() -> anyhow::Result<()> {
                             }
                         }
                     }
-                    KeyEvent::Released(key) => {
-                        if key == current_profile.repeat_key {
+                    KeyEvent::Released{ device_name, key_code} => {
+                        if &*device_name == "clicker-rs" {
+                            return;
+                        }
+
+                        if key_code == current_profile.repeat_key {
                             if let Some(registration_token) = state.registration_token.take() {
                                 log::info!(
                                     "Autoclicker stopped using profile '{}' with repeat key {:?} (CPS={:?}, jitter={:?})",
