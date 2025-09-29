@@ -1,4 +1,4 @@
-use crate::Clicker;
+use crate::{Clicker, config};
 use calloop::timer::{TimeoutAction, Timer};
 use evdev::uinput::VirtualDevice;
 use evdev::{AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode};
@@ -17,11 +17,11 @@ pub struct VirtualPointer {
 }
 
 impl VirtualPointer {
-    pub fn try_new() -> anyhow::Result<Self> {
+    pub fn try_new(config: &config::Config) -> anyhow::Result<Self> {
         let mut keys = AttributeSet::new();
-        keys.insert(KeyCode::BTN_LEFT);
-        keys.insert(KeyCode::BTN_RIGHT);
-        keys.insert(KeyCode::BTN_MIDDLE);
+        for profile in config.profiles.iter() {
+            keys.insert(profile.repeat_key);
+        }
 
         let mut relative_axes = AttributeSet::new();
         relative_axes.insert(RelativeAxisCode::REL_X);

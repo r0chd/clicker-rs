@@ -31,7 +31,7 @@ impl Clicker {
         config: config::Config,
         loop_handle: LoopHandle<'static, Self>,
     ) -> Self {
-        let virtual_pointer = VirtualPointer::try_new().unwrap();
+        let virtual_pointer = VirtualPointer::try_new(&config).unwrap();
 
         let current_profile = config
             .profiles
